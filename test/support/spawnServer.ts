@@ -120,7 +120,7 @@ Using Service Worker build:
   })
 
   return new Promise((resolve, reject) => {
-    const server = wds.listen(0, 'localhost', (error) => {
+    const server = wds.listen(0, 'localhost', function handleReady(error) {
       if (error) {
         return reject(error)
       }

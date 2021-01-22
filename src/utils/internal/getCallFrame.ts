@@ -20,7 +20,8 @@ export function getCallFrame() {
     }
 
     // Extract file reference from the stack frame.
-    const [, declarationPath] = declarationFrame.match(/\((.+?)\)$/) || []
+    const [, declarationPath] =
+      declarationFrame.match(/.+? (\/.+?\d+:\d+)/) || []
     return declarationPath
   }
 }

@@ -8,68 +8,73 @@ function createRuntime() {
   )
 }
 
-function findQueryParametersWarning(logs: string[]) {
-  return logs.find((text) => {
-    return text.startsWith(
-      '[MSW] Found a redundant usage of query parameters in the request handler URL',
-    )
-  })
-}
-
-function findQueryParametersSuggestions(logs: string[], params: string[]) {
-  return logs.find((text) => {
-    return params.every((paramName) =>
-      text.includes(`const ${paramName} = query.get("${paramName}")`),
-    )
-  })
-}
-
-test('warns when a request handler URL contains a single query parameter', async () => {
+test('warns when a request handler URL contains query parameters', async () => {
   const runtime = await createRuntime()
   const { messages } = captureConsole(runtime.page)
 
   await runtime.reload()
-  expect(findQueryParametersWarning(messages.warning)).toBeUndefined()
 
-  const res = await runtime.request({
-    url: runtime.makeUrl('/user?id=123'),
-  })
-  expect(res.status()).toBe(200)
+  expect(messages.warning).toEqual([
+    `\
+[MSW] Found a redundant usage of query parameters in the request handler URL for "GET /user?name=admin". Please match against a path instead, and access query parameters in the response resolver function:
 
-  // Should produce a friendly warning.
-  expect(findQueryParametersWarning(messages.warning)).not.toBeUndefined()
+rest.get("/user", (req, res, ctx) => {
+  const query = req.url.searchParams
+  const name = query.get("name")
+})\
+`,
+    `\
+[MSW] Found a redundant usage of query parameters in the request handler URL for "POST /login?id=123&type=auth". Please match against a path instead, and access query parameters in the response resolver function:
 
-  // Should suggest how to reference query parameters in the response resolver.
-  expect(
-    findQueryParametersSuggestions(messages.warning, ['name']),
-  ).not.toBeUndefined()
+rest.post("/login", (req, res, ctx) => {
+  const query = req.url.searchParams
+  const id = query.get("id")
+  const type = query.get("type")
+})\
+`,
+  ])
 
-  return runtime.cleanup()
-})
+  await runtime
+    .request({
+      url: runtime.makeUrl('/user?name=admin'),
+    })
+    .then(async (res) => {
+      expect(res.status()).toBe(200)
+      expect(await res.text()).toBe('user-response')
+    })
 
-test('warns when a request handler URL contains multiple query parameters', async () => {
-  const runtime = await createRuntime()
+  await runtime
+    .request({
+      url: runtime.makeUrl('/user'),
+    })
+    .then(async (res) => {
+      expect(res.status()).toBe(200)
+      expect(await res.text()).toBe('user-response')
+    })
 
-  const { messages } = captureConsole(runtime.page)
+  await runtime
+    .request({
+      url: runtime.makeUrl('/login?id=123&type=auth'),
+      fetchOptions: {
+        method: 'POST',
+      },
+    })
+    .then(async (res) => {
+      expect(res.status()).toBe(200)
+      expect(await res.text()).toBe('login-response')
+    })
 
-  await runtime.reload()
-  expect(findQueryParametersWarning(messages.warning)).toBeUndefined()
-
-  const res = await runtime.request({
-    url: runtime.makeUrl('/login?id=123'),
-    fetchOptions: {
-      method: 'POST',
-    },
-  })
-  expect(res.status()).toBe(200)
-
-  // Should produce a friendly warning.
-  expect(findQueryParametersWarning(messages.warning)).not.toBeUndefined()
-
-  // Should suggest how to reference query parameters in the response resolver.
-  expect(
-    findQueryParametersSuggestions(messages.warning, ['id', 'type']),
-  ).not.toBeUndefined()
+  await runtime
+    .request({
+      url: runtime.makeUrl('/login'),
+      fetchOptions: {
+        method: 'POST',
+      },
+    })
+    .then(async (res) => {
+      expect(res.status()).toBe(200)
+      expect(await res.text()).toBe('login-response')
+    })
 
   return runtime.cleanup()
 })
